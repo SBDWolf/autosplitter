@@ -14,20 +14,19 @@ state("Fusion"){
     byte paused : 0x2A52D4, 0x000C;
     ushort finisher : 0x2A52D4, 0xE9B4;
 }
-
-state("retroarch"){
-    byte level : 0x2A52D4, 0xCCCF;
-    // byte health : 0x2A52D4, 0xCCF7;
-    // ushort backGround : 0x2A52D4, 0x84A8;
-    // ushort x : 0x2A52D4, 0x9356;
-    // ushort xCamera : 0x2A52D4, 0x93D6;
-    // ushort yCamera : 0x2A52D4, 0x93D8;
-    // byte button1 : 0x2A52D4, 0x819C;
-    // byte button2 : 0x2A52D4, 0x819D;
-    // byte cursor : 0x2A52D4, 0x916F;
-    // byte options : 0x2A52D4, 0x3400;
-    // byte paused : 0x2A52D4, 0x000C;
-    // ushort finisher : 0x2A52D4, 0xE9B4;
+state("retroarch"){     //genesis_plus_gx
+    byte level : "genesis_plus_gx_libretro.dll", 0xF8308E;
+    byte health :"genesis_plus_gx_libretro.dll", 0x2A105F, 0xCCF8;
+    ushort backGround : 0x2A52D4, 0x84A8;
+    ushort x : 0x2A52D4, 0x9356;
+    ushort xCamera : 0x2A52D4, 0x93D6;
+    ushort yCamera : 0x2A52D4, 0x93D8;
+    byte button1 : "genesis_plus_gx_libretro.dll", 0xF8E4CA;
+    byte button2 : 0x2A52D4, 0x819D;
+    byte cursor : 0x2A52D4, 0x916F;
+    byte options : 0x2A52D4, 0x3400;
+    byte paused : 0x2A52D4, 0x000C;
+    ushort finisher : 0x2A52D4, 0xE9B4;
 }
 
 //x value is level 10 specific
@@ -59,13 +58,10 @@ startup{
 
 init
 {
-    IntPtr baseAddress, codeOffset;
-    long refLocation = 0, smsOffset = 0;
-    long memoryOffset = 0, smsMemoryOffset = 0;
-    SigScanTarget target;
+
 
     current.currentLevel = 0;
-    current.canStart = true;
+    current.canStart = false;
     current.throwing = false;
     current.scarx = 1190; //higher
     current.scary = 200; //lower
@@ -83,36 +79,180 @@ init
         {"l10", 2082},
     };
     vars.lNames = new List<String>(vars.scenes.Keys);
-    ProcessModuleWow64Safe libretromodule = modules.Where(m => m.ModuleName == "genesis_plus_gx_libretro.dll" || m.ModuleName == "blastem_libretro.dll" || m.ModuleName == "picodrive_libretro.dll").First();                    
-    target = new SigScanTarget(0x10, "85 C9 74 ?? 83 F9 02 B8 00 00 00 00 48 0F 44 05 ?? ?? ?? ?? C3");
-    codeOffset = vars.LookUpInDLL( game, libretromodule, target );
-    long memoryReference = memory.ReadValue<int>( codeOffset );
-    refLocation = ( (long) codeOffset + 0x04 + memoryReference );
-    print("[LION_INIT] process: " + game.ProcessName);
-    print("[LION_INIT] models: " + libretromodule.BaseAddress);
-    print("[LION_INIT] model size: " + libretromodule.ModuleMemorySize);
-    print("[LION_INIT] game: " + game.Is64Bit());
-    print("[LION_INIT] REF: " + refLocation);
+    if(game.ProcessName == "retroarch"){
+        IntPtr baseAddress, codeOffset;
+        long memoryReference;
+        long refLocation = 0;
+        long memoryOffset = 0;
+        SigScanTarget target;
+        baseAddress = modules.First().BaseAddress;
+        ProcessModuleWow64Safe libretromodule = modules.Where(m => m.ModuleName == "genesis_plus_gx_libretro.dll").First();  
+        if ( game.Is64Bit() ) {
+            target = new SigScanTarget(0x10, "85 C9 74 ?? 83 F9 02 B8 00 00 00 00 48 0F 44 05 ?? ?? ?? ?? C3");
+            codeOffset = vars.LookUpInDLL( game, libretromodule, target );
+            memoryReference = memory.ReadValue<int>( codeOffset );
+            refLocation = ( (long) codeOffset + 0x04 + memoryReference );
+
+        } else {
+            target = new SigScanTarget(0, "8B 44 24 04 85 C0 74 18 83 F8 02 BA 00 00 00 00 B8 ?? ?? ?? ?? 0F 45 C2 C3 8D B4 26 00 00 00 00");
+            codeOffset = vars.LookUpInDLL( game, libretromodule, target );
+            memoryReference = 0;
+            refLocation = (long) codeOffset + 0x11;
+        }
+        vars.emuoffsets = new MemoryWatcherList
+        {
+            new MemoryWatcher<uint>( (IntPtr) refLocation ) { Name = "genesis", FailAction = MemoryWatcher.ReadFailAction.SetZeroOrNull },
+            new MemoryWatcher<uint>( (IntPtr) baseAddress ) { Name = "baseaddress", FailAction = MemoryWatcher.ReadFailAction.SetZeroOrNull }
+        };
+        memoryOffset = vars.emuoffsets["genesis"].Current;
+        if ( memoryOffset == 0 && refLocation > 0 ) {
+            memoryOffset = refLocation;
+        }
+        vars.watchers = new MemoryWatcherList{};
+
+        vars.watchers.Add( new MemoryWatcher<byte>( 
+            (IntPtr) ( (  memoryOffset ) + 0xCCCE + 0x24440) 
+            ) { Name = "level", Enabled = true } 
+        );
+        vars.watchers.Add( new MemoryWatcher<byte>( 
+                    (IntPtr) ( (  memoryOffset ) + 0xCCF6 + 0x24440) 
+                    ) { Name = "health", Enabled = true } 
+        );
+        vars.watchers.Add( new MemoryWatcher<ushort>( 
+            (IntPtr) ( (  memoryOffset ) + 0x84A8 + 0x24440) 
+            ) { Name = "backGround", Enabled = true } 
+        );
+        vars.watchers.Add( new MemoryWatcher<ushort>( 
+                    (IntPtr) ( (  memoryOffset ) + 0x9356 + 0x24440) 
+                    ) { Name = "x", Enabled = true } 
+        );
+        vars.watchers.Add( new MemoryWatcher<ushort>( 
+            (IntPtr) ( (  memoryOffset ) + 0x93D6 + 0x24440) 
+            ) { Name = "xCamera", Enabled = true } 
+        );
+        vars.watchers.Add( new MemoryWatcher<ushort>( 
+                    (IntPtr) ( (  memoryOffset ) + 0x93D8 + 0x24440) 
+                    ) { Name = "yCamera", Enabled = true } 
+        );
+        vars.watchers.Add( new MemoryWatcher<byte>( 
+            (IntPtr) ( (  memoryOffset ) + 0x819B + 0x24440) 
+            ) { Name = "button1", Enabled = true } 
+        );
+        vars.watchers.Add( new MemoryWatcher<byte>( 
+                    (IntPtr) ( (  memoryOffset ) + 0x819C + 0x24440) 
+                    ) { Name = "button2", Enabled = true } 
+        );
+        vars.watchers.Add( new MemoryWatcher<byte>( 
+            (IntPtr) ( (  memoryOffset ) + 0x916E + 0x24440) 
+            ) { Name = "cursor", Enabled = true } 
+        );
+        vars.watchers.Add( new MemoryWatcher<byte>( 
+                    (IntPtr) ( (  memoryOffset ) + 0x3400 + 0x24440) 
+                    ) { Name = "options", Enabled = true } 
+        );
+        vars.watchers.Add( new MemoryWatcher<byte>( 
+                    (IntPtr) ( (  memoryOffset ) + 0x000D + 0x24440) 
+                    ) { Name = "paused", Enabled = true } 
+        );
+        vars.watchers.Add( new MemoryWatcher<ushort>( 
+                    (IntPtr) ( (  memoryOffset ) + 0xE9B4 + 0x24440) 
+                    ) { Name = "finisher", Enabled = true } 
+        );
+
+        current.level = vars.watchers["level"].Current;
+        current.health = vars.watchers["health"].Current;
+        current.backGround = vars.toBigEndian(vars.watchers["backGround"].Current);
+        current.x = vars.toBigEndian(vars.watchers["x"].Current);
+        current.xCamera = vars.toBigEndian(vars.watchers["xCamera"].Current);
+        current.yCamera = vars.toBigEndian(vars.watchers["yCamera"].Current);
+        current.button1 = vars.watchers["button1"].Current;
+        current.button2 = vars.watchers["button2"].Current;
+        current.cursor = vars.watchers["cursor"].Current;
+        current.options = vars.watchers["options"].Current;
+        current.paused = vars.watchers["paused"].Current;
+        current.finisher = vars.toBigEndian(vars.watchers["finisher"].Current);
+        print("[LION_INIT]: " + String.Format("memory should start at {0:X}", memoryOffset));
+        print("[LION_INIT] process: " + game.ProcessName);
+        print("[LION_INIT] models: " + libretromodule.BaseAddress);
+        print("[LION_INIT] model size: " + libretromodule.ModuleMemorySize);
+        print("[LION_INIT] game: " + game.Is64Bit());
+        print("[LION_INIT] REF: " + refLocation);
+        print("[LION_INIT] codeoff: " + codeOffset);
+        print("[LION_INIT] memset: " + memoryReference);
+        print("[LION_INIT] health: " + vars.watchers["health"].Current);
+    }
+    
 }
 
 start 
 {
-    // if(current.options == 0){
-    //     current.canStart = false;
-    // } else {
-    //     if(current.button2 == 0){
-    //         current.canStart = true;
-    //     }
-    // }
+    
+    // print("[LION]: health -> " + current.health);
+    // print("[LION]: level -> " + current.level);
+    print("[LION]: button -> " + current.button2);
+    // print("[LION]: x -> " + vars.toBigEndian(current.x));
+    // print("[LION]: y -> " + vars.toBigEndian(current.yCamera));
+    if(current.options == 0){
+        current.canStart = false;
+    } else {
+        if(current.button2 == 0){
+            current.canStart = true;
+        }
+    }
+    if(vars.toBigEndian(old.backGround) != vars.scenes["menu"]){
+        current.canStart = false;
+    }
 
-    // if(current.canStart && current.button2 >= 16 && old.options != 0 && current.cursor == 248 && vars.toBigEndian(old.backGround) == vars.scenes["menu"]){
-    //     current.currentLevel = 1;
-    //     return true;
-    // }
+    if(current.canStart && current.button2 >= 16 && old.options != 0 && current.cursor == 248 && vars.toBigEndian(old.backGround) == vars.scenes["menu"]){
+        print("[LION]: health -> " + current.health);
+        print("[LION]: level -> " + current.level);
+        print("[LION]: button1 -> " + current.button1);
+        print("[LION]: button2 -> " + current.button2);
+        print("[LION]: x -> " + vars.toBigEndian(current.x));
+        print("[LION]: y -> " + vars.toBigEndian(current.yCamera));
+        current.currentLevel = 1;
+        return true;
+    }
+}
+
+update
+{
+    //     byte level : 0x2A52D4, 0xCCCF;
+    // byte health : 0x2A52D4, 0xCCF7;
+    // ushort backGround : 0x2A52D4, 0x84A8;
+    // ushort x : 0x2A52D4, 0x9356;
+    // ushort xCamera : 0x2A52D4, 0x93D6;
+    // ushort yCamera : 0x2A52D4, 0x93D8;
+    // byte button1 : 0x2A52D4, 0x819C;
+    // byte button2 : 0x2A52D4, 0x819D;
+    // byte cursor : 0x2A52D4, 0x916F;
+    // byte options : 0x2A52D4, 0x3400;
+    // byte paused : 0x2A52D4, 0x000C;
+    // ushort finisher : 0x2A52D4, 0xE9B4;
+    if(game.ProcessName == "retroarch"){
+        vars.watchers.UpdateAll(game);
+        current.level = vars.watchers["level"].Current;
+        current.health = vars.watchers["health"].Current;
+        current.backGround = vars.toBigEndian(vars.watchers["backGround"].Current);
+        current.x = vars.toBigEndian(vars.watchers["x"].Current);
+        current.xCamera = vars.toBigEndian(vars.watchers["xCamera"].Current);
+        current.yCamera = vars.toBigEndian(vars.watchers["yCamera"].Current);
+        current.button1 = vars.watchers["button1"].Current;
+        current.button2 = vars.watchers["button2"].Current;
+        current.cursor = vars.watchers["cursor"].Current;
+        current.options = vars.watchers["options"].Current;
+        current.paused = vars.watchers["paused"].Current;
+        current.finisher = vars.toBigEndian(vars.watchers["finisher"].Current);
+    }
 }
 
 split 
 {
+    // print("[LION_SPLIT]: health -> " + current.health);
+    // print("[LION_SPLIT]: level -> " + current.level);
+    //print("[LION_SPLIT]: BG -> " + vars.toBigEndian(current.backGround));
+    // print("[LION_SPLIT]: x -> " + vars.toBigEndian(current.yCamera));
+    // print("[LION_SPLIT]: paused -> " + current.paused);
     if(current.paused != 0){
         return false;
     }
@@ -126,9 +266,15 @@ split
     if(current.level == current.currentLevel + 1){
         current.currentLevel = current.level;
         print("[LION_SPLIT]: level swap-> ");
+        print("[LION_SPLIT]: health -> " + current.health);
+        print("[LION_SPLIT]: level -> " + current.level);
+        print("[LION_SPLIT]: BG -> " + vars.toBigEndian(current.backGround));
+        print("[LION_SPLIT]: BGO -> " + vars.toBigEndian(old.backGround));
+        print("[LION_SPLIT]: CURSOR -> " + current.cursor);
         return true;
     }
     if(vars.toBigEndian(old.backGround) == vars.scenes[vars.lNames[current.currentLevel]] && vars.toBigEndian(current.backGround) < vars.scenes[vars.lNames[current.currentLevel]] && current.health > 0){
+        print("[LION_SPLIT]: akwafpk -> ");
         print("[LION_SPLIT]: health -> " + current.health);
         print("[LION_SPLIT]: level -> " + current.level);
         print("[LION_SPLIT]: BG -> " + vars.toBigEndian(current.backGround));
@@ -144,7 +290,7 @@ split
             return false;
         }
 
-        if(current.currentLevel == 9 && (vars.toBigEndian(current.yCamera) < 600 || vars.toBigEndian(current.xCamera) < 2750)){
+        if(current.currentLevel == 9 && (vars.toBigEndian(current.yCamera) < 580 || vars.toBigEndian(current.xCamera) < 2750)){
             return false;
         }
         current.currentLevel = current.currentLevel + 1;
