@@ -1,4 +1,5 @@
 // Code by Kannadan
+// retroarch address scan from beninswens sonic splitter
 
 state("Fusion"){
     byte level : 0x2A52D4, 0xCCCF;
