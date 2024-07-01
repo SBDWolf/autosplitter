@@ -23,6 +23,28 @@ state("snes9x-x64"){
     byte options : 0x8D8BE8, 0x1F;
 }
 
+state("bsnes", "v115"){
+    byte level : "bsnes.exe",  0x736D1A;
+    ushort menu : "bsnes.exe", 0x721FC4;
+    ushort finisher : "bsnes.exe", 0x7177E1;
+    ushort x : "bsnes.exe", 0x7266C2;
+    ushort yCamera : "bsnes.exe", 0x716DC8;
+    byte button1 : "bsnes.exe", 0x716DD8;
+    byte button2 : "bsnes.exe", 0x716DD9;
+    byte options : "bsnes.exe", 0x716D9B;
+}
+
+state("bsnes", "v115_nightly"){
+    byte level : "bsnes.exe",  0x75AD1A;
+    ushort menu : "bsnes.exe", 0x745FC4;
+    ushort finisher : "bsnes.exe", 0x73B7E1;
+    ushort x : "bsnes.exe", 0x74A6C2;
+    ushort yCamera : "bsnes.exe", 0x73ADC8;
+    byte button1 : "bsnes.exe", 0x73ADD8;
+    byte button2 : "bsnes.exe", 0x73ADD9;
+    byte options : "bsnes.exe", 0x73AD9B;
+}
+
 //SNES CONTROLS
 //button1: A->128, X->64, R->16, L->32
 //button2: Y->64, B->128, START->16, SELECT->32
@@ -37,6 +59,11 @@ startup{
 
 init
 {
+    if (modules.First().ModuleMemorySize == 52477952)
+        version = "v115";
+    else if (modules.First().ModuleMemorySize == 52719616)
+        version = "v115_nightly";
+
     current.currentLevel = 0;
     current.canStart = true;
     current.throwing = false;
